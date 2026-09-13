@@ -1,0 +1,6 @@
+[submodule "UART-elec"]
+	path = UART-elec
+	url = https://github.com/wmstianya/elec_steam.git
+[submodule "UART"]
+	path = UART
+	url = https://github.com/wmstianya/elec_steam_medium.git

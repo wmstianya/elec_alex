@@ -7,7 +7,7 @@
 | `UART-elec/` | **联控**主控固件 | https://github.com/wmstianya/elec_steam | STM32F103VE |
 | `UART/` | **分机**固件 | https://github.com/wmstianya/elec_steam_medium | STM32F103C8 |
 
-通讯拓扑:联控通过 USART4(9600,Modbus RTU)轮询 1~10 号分机;分机 USART2 接屏(地址 200)或联控(拨码 1~15)。
+通讯拓扑:联控通过 USART4(9600,Modbus RTU)轮询 1~10 号分机;分机原有 USART2 接屏(地址 254)或联控(拨码 1~15)。新增独立小屏显示接口的端口选择、CSV 和验证记录见[小屏交付说明](SMALL_SCREEN_DELIVERY.md)。
 
 ## 克隆
 

@@ -9,13 +9,14 @@ static UnionBlowdownState master;
 static SlaveWaterInputs input;
 static uint16_t status[4], command[4];
 static unsigned opened;
+static uint8_t sample_mask = 7;
 
 static void advance(unsigned duration)
 {
     unsigned n;
     for (n = 0; n < duration; ++n) {
         Slave_Water_Tick1ms();
-        Slave_Water_Observe(7);
+        Slave_Water_Observe(sample_mask);
         input.valve_feedback = Slave_Water_ValveOpenAllowed() ? BD_VALVE_OPEN : BD_VALVE_CLOSED;
         Slave_Water_Service(&input);
         if (Slave_Water_ValveOpenAllowed()) ++opened;
@@ -35,15 +36,26 @@ static void deliver(void)
     CHECK(Slave_Water_Command(command));
 }
 
+static void advance_coordinated(unsigned duration)
+{
+    while(duration) {
+        unsigned step = duration > 1000u ? 1000u : duration;
+        advance(step);
+        read_status();
+        deliver();
+        duration -= step;
+    }
+}
+
 static void test_completed_session_rebind(void)
 {
-    const BlowdownConfig cfg = {10,100,30,200,20,100};
+    const BlowdownConfig cfg = {10,100,30,40000,20,100};
     Slave_Water_Init(); Slave_Water_SetBlowdownConfig(&cfg);
     CHECK(Slave_Water_BindPersistedSession(51));
     advance(WATER_RECOVERY_MS+20);
     union_blowdown_init(&master,51,Slave_Water_NowMs());
     union_blowdown_step(&master,1,1,Slave_Water_NowMs());
-    CHECK(Slave_Water_Request(0,1));read_status();deliver();advance(136);
+    CHECK(Slave_Water_Request(0,1));read_status();deliver();advance_coordinated(WATER_RECOVERY_MS+200u);
     CHECK(Slave_Water_Phase()==BD_COMPLETE);
     CHECK(Slave_Water_BindPersistedSession(52));
     union_blowdown_init(&master,52,Slave_Water_NowMs());
@@ -55,7 +67,7 @@ static void test_completed_session_rebind(void)
 
 int main(void)
 {
-    const BlowdownConfig config = {10, 100, 30, 200, 20, 100};
+    const BlowdownConfig config = {10, 10000, 30, 40000, 20, 100};
     uint16_t completed_request;
     uint8_t completed_phase;
     Slave_Water_Init();
@@ -72,7 +84,12 @@ int main(void)
     deliver(); CHECK(command[0] == (UB_TAG | UB_GRANT));
     advance(11); CHECK(Slave_Water_ValveOpenAllowed());
     deliver(); /* Exact duplicate does not create another request. */
-    advance(125); CHECK(opened && Slave_Water_Phase() == BD_COMPLETE);
+    sample_mask=5; advance_coordinated(9999);
+    CHECK(Slave_Water_Phase()==BD_OPEN && !Slave_Water_Fault() && !Slave_Water_HeatAllowed());
+    CHECK(master.owner==1 && (union_blowdown_unavailable_mask(&master,Slave_Water_NowMs())&1));
+    advance(1); CHECK(Slave_Water_Phase()==BD_CLOSE && !Slave_Water_ValveOpenAllowed());
+    sample_mask=7; advance_coordinated(WATER_RECOVERY_MS+70u);
+    CHECK(opened && Slave_Water_Phase() == BD_COMPLETE);
     read_status(); CHECK(!master.owner && !master.interlock);
     CHECK(union_blowdown_take_completed(&master, 1, &completed_request, &completed_phase));
     CHECK(completed_request == 1 && completed_phase == UB_COMPLETE);
